@@ -8,8 +8,12 @@ interface ModelSelectorProps {
 
 export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onModelChange }) => {
   const handleProviderChange = (provider: Provider) => {
-    const defaultModel = provider === 'gemini' ? 'gemini-1.5-pro' : 'mistral-small';
-    onModelChange({ provider, model: defaultModel });
+    const defaultModels = {
+      gemini: 'gemini-1.5-pro',
+      mistral: 'mistral-small',
+      groq: 'mixtral-8x7b-32768'
+    };
+    onModelChange({ provider, model: defaultModels[provider] });
   };
 
   const handleModelChange = (model: string) => {
@@ -25,6 +29,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onMo
       >
         <option value="gemini">Gemini AI</option>
         <option value="mistral">Mistral AI</option>
+        <option value="groq">GROQ</option>
       </select>
       
       {currentModel.provider === 'gemini' ? (
@@ -36,7 +41,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onMo
           <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
           <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
         </select>
-      ) : (
+      ) : currentModel.provider === 'mistral' ? (
         <select
           value={currentModel.model}
           onChange={(e) => handleModelChange(e.target.value)}
@@ -45,6 +50,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onMo
           <option value="mistral-tiny">Mistral Tiny</option>
           <option value="mistral-small">Mistral Small</option>
           <option value="mistral-medium">Mistral Medium</option>
+        </select>
+      ) : (
+        <select
+          value={currentModel.model}
+          onChange={(e) => handleModelChange(e.target.value)}
+          className="bg-primary border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 text-primary"
+        >
+          <option value="mixtral-8x7b-32768">Mixtral 8x7B-32K</option>
+          <option value="gemma-7b-it">Gemma 7B-IT</option>
+          <option value="llama2-70b-4096">LLaMA2 70B-4K</option>
         </select>
       )}
     </div>

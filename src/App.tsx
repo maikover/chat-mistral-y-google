@@ -6,6 +6,7 @@ import { SystemInstructionsModal } from './components/SystemInstructionsModal';
 import { InputControls } from './components/InputControls';
 import { geminiService } from './services/gemini';
 import { mistralService } from './services/mistral';
+import { groqService } from './services/groq';
 import { Provider, ModelType } from './services/types';
 
 interface Message {
@@ -47,7 +48,7 @@ function App() {
       isBot: true 
     }]);
 
-    if (!import.meta.env.VITE_GEMINI_API_KEY || !import.meta.env.VITE_MISTRAL_API_KEY) {
+    if (!import.meta.env.VITE_GEMINI_API_KEY || !import.meta.env.VITE_MISTRAL_API_KEY || !import.meta.env.VITE_GROQ_API_KEY) {
       setError('Por favor agrega tus API keys en el archivo .env');
     }
 
@@ -97,7 +98,12 @@ function App() {
   }, []);
 
   const getCurrentService = () => {
-    return currentModel.provider === 'gemini' ? geminiService : mistralService;
+    const services = {
+      gemini: geminiService,
+      mistral: mistralService,
+      groq: groqService
+    };
+    return services[currentModel.provider];
   };
 
   const startVoiceInput = () => {
@@ -131,8 +137,8 @@ function App() {
   };
 
   const handleImageUpload = async (file: File) => {
-    if (currentModel.provider === 'mistral') {
-      setError('Mistral AI no soporta el análisis de imágenes');
+    if (currentModel.provider !== 'gemini') {
+      setError('Solo Gemini AI soporta el análisis de imágenes');
       return;
     }
     
@@ -153,7 +159,7 @@ function App() {
 
   const handleModelChange = (model: ModelType) => {
     setCurrentModel(model);
-    const service = model.provider === 'gemini' ? geminiService : mistralService;
+    const service = getCurrentService();
     service.setModel(model.model);
     setImageData(null);
   };
