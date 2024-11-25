@@ -59,7 +59,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onMo
         >
           <option value="mixtral-8x7b-32768">Mixtral 8x7B-32K</option>
           <option value="gemma-7b-it">Gemma 7B-IT</option>
-          <option value="llama2-70b-4096">LLaMA2 70B-4K</option>
         </select>
       )}
     </div>

@@ -45,12 +45,9 @@ body {
 }
 
 .prose pre {
-  background-color: var(--bg-secondary);
-  padding: 1rem;
-  border-radius: 0.5rem;
-  overflow-x: auto;
-  position: relative;
-  margin: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
 }
 
 .prose code {
@@ -58,25 +55,6 @@ body {
   color: var(--text-primary);
   padding: 0.2rem 0.4rem;
   border-radius: 0.25rem;
-}
-
-.copy-button {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  padding: 0.25rem 0.5rem;
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 0.25rem;
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.copy-button:hover {
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
 }
 
 .textarea-expand {

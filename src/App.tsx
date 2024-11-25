@@ -4,19 +4,23 @@ import { ChatMessage } from './components/ChatMessage';
 import { ModelSelector } from './components/ModelSelector';
 import { SystemInstructionsModal } from './components/SystemInstructionsModal';
 import { InputControls } from './components/InputControls';
+import { ConversationList } from './components/ConversationList';
 import { geminiService } from './services/gemini';
 import { mistralService } from './services/mistral';
 import { groqService } from './services/groq';
-import { Provider, ModelType } from './services/types';
-
-interface Message {
-  text: string;
-  isBot: boolean;
-  imageData?: string;
-}
+import { StorageService, Conversation } from './services/storage';
+import { Message, ModelType } from './types';
 
 function App() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [currentConversation, setCurrentConversation] = useState<Conversation>(() => {
+    const conversations = StorageService.getConversationsList();
+    if (conversations.length > 0) {
+      const lastConversation = StorageService.getConversation(conversations[0].id);
+      return lastConversation || StorageService.createNewConversation();
+    }
+    return StorageService.createNewConversation();
+  });
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +30,9 @@ function App() {
   });
   const [imageData, setImageData] = useState<string | null>(null);
   const [isInstructionsModalOpen, setIsInstructionsModalOpen] = useState(false);
-  const [systemInstructions, setSystemInstructions] = useState('');
+  const [globalInstructions, setGlobalInstructions] = useState(() => 
+    StorageService.getGlobalInstructions()
+  );
   const [isDarkMode, setIsDarkMode] = useState(() => 
     window.matchMedia('(prefers-color-scheme: dark)').matches
   );
@@ -39,19 +45,16 @@ function App() {
   const micReadyTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
+    if (!import.meta.env.VITE_GEMINI_API_KEY || !import.meta.env.VITE_MISTRAL_API_KEY || !import.meta.env.VITE_GROQ_API_KEY) {
+      setError('Por favor agrega tus API keys en el archivo .env');
+    }
+  }, []);
+
+  useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
 
   useEffect(() => {
-    setMessages([{ 
-      text: "¡Hola! Soy un asistente de IA. ¿En qué puedo ayudarte hoy?", 
-      isBot: true 
-    }]);
-
-    if (!import.meta.env.VITE_GEMINI_API_KEY || !import.meta.env.VITE_MISTRAL_API_KEY || !import.meta.env.VITE_GROQ_API_KEY) {
-      setError('Por favor agrega tus API keys en el archivo .env');
-    }
-
     if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
@@ -155,7 +158,7 @@ function App() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [currentConversation.messages]);
 
   const handleModelChange = (model: ModelType) => {
     setCurrentModel(model);
@@ -164,22 +167,68 @@ function App() {
     setImageData(null);
   };
 
-  const handleSystemInstructions = (instructions: string) => {
-    setSystemInstructions(instructions);
+  const handleSystemInstructions = (instructions: string, isGlobal: boolean) => {
+    if (isGlobal) {
+      setGlobalInstructions(instructions);
+      StorageService.saveGlobalInstructions(instructions);
+    }
+    
+    const updatedConversation = {
+      ...currentConversation,
+      systemInstructions: instructions,
+      lastModified: Date.now()
+    };
+    
+    setCurrentConversation(updatedConversation);
+    StorageService.saveConversation(updatedConversation);
     getCurrentService().setSystemInstructions(instructions);
   };
 
   const clearChat = () => {
-    setMessages([{ 
-      text: "¡Hola! Soy un asistente de IA. ¿En qué puedo ayudarte hoy?", 
-      isBot: true 
-    }]);
+    const newConversation = StorageService.createNewConversation();
+    setCurrentConversation(newConversation);
     setImageData(null);
     getCurrentService().resetChat();
   };
 
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode);
+  };
+
+  const regenerateMessage = async (index: number) => {
+    const messageToRegenerate = currentConversation.messages[index];
+    if (!messageToRegenerate.userMessage) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const service = getCurrentService();
+      const response = await service.chat(
+        messageToRegenerate.userMessage,
+        messageToRegenerate.userImageData || undefined
+      );
+
+      const newMessages = [...currentConversation.messages];
+      newMessages[index] = {
+        ...messageToRegenerate,
+        text: response
+      };
+
+      const updatedConversation = {
+        ...currentConversation,
+        messages: newMessages,
+        lastModified: Date.now()
+      };
+
+      setCurrentConversation(updatedConversation);
+      StorageService.saveConversation(updatedConversation);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -190,18 +239,48 @@ function App() {
     setInput('');
     setError(null);
 
-    setMessages(prev => [...prev, { 
-      text: userMessage || "Analiza esta imagen por favor", 
-      isBot: false,
-      imageData: imageData || undefined
-    }]);
+    const newMessages = [
+      ...currentConversation.messages,
+      { 
+        text: userMessage || "Analiza esta imagen por favor", 
+        isBot: false,
+        imageData: imageData || undefined
+      }
+    ];
+
+    const updatedConversation = {
+      ...currentConversation,
+      messages: newMessages,
+      lastModified: Date.now()
+    };
+
+    setCurrentConversation(updatedConversation);
+    StorageService.saveConversation(updatedConversation);
 
     setIsLoading(true);
 
     try {
       const service = getCurrentService();
       const response = await service.chat(userMessage || "Describe esta imagen en detalle", imageData);
-      setMessages(prev => [...prev, { text: response, isBot: true }]);
+      
+      const finalMessages = [
+        ...newMessages,
+        { 
+          text: response, 
+          isBot: true,
+          userMessage: userMessage || "Describe esta imagen en detalle",
+          userImageData: imageData || undefined
+        }
+      ];
+
+      const finalConversation = {
+        ...currentConversation,
+        messages: finalMessages,
+        lastModified: Date.now()
+      };
+
+      setCurrentConversation(finalConversation);
+      StorageService.saveConversation(finalConversation);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado';
       setError(errorMessage);
@@ -211,100 +290,132 @@ function App() {
     }
   };
 
-  return (
-    <div className="flex flex-col h-screen bg-primary">
-      <header className="bg-primary border-b border-border fixed w-full top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-300 flex items-center justify-center">
-                <Bot size={20} />
-              </div>
-              <h1 className="text-xl font-semibold">El Chat Que No Lograrán Tumbar</h1>
-            </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <ModelSelector currentModel={currentModel} onModelChange={handleModelChange} />
-              <button
-                onClick={toggleDarkMode}
-                className="p-2 text-secondary hover:bg-secondary rounded-lg transition-colors"
-                title={isDarkMode ? "Modo claro" : "Modo oscuro"}
-              >
-                {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-              </button>
-              <button
-                onClick={() => setIsInstructionsModalOpen(true)}
-                className="p-2 text-secondary hover:bg-secondary rounded-lg transition-colors"
-                title="Instrucciones del Sistema"
-              >
-                <Settings2 size={20} />
-              </button>
-              <button
-                onClick={clearChat}
-                className="p-2 text-secondary hover:bg-secondary rounded-lg transition-colors"
-                title="Limpiar chat"
-              >
-                <Trash2 size={20} />
-              </button>
-            </div>
-          </div>
-          {error && (
-            <div className="mt-2">
-              <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/50 p-3 rounded-lg">
-                {error}
-              </div>
-            </div>
-          )}
-        </div>
-      </header>
+  const handleNewConversation = () => {
+    const newConversation = StorageService.createNewConversation();
+    setCurrentConversation(newConversation);
+    setImageData(null);
+    getCurrentService().resetChat();
+  };
 
-      <main className="flex-1 overflow-y-auto pt-24 pb-24">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="space-y-4">
-            {messages.map((message, index) => (
-              <div key={index}>
-                <ChatMessage message={message.text} isBot={message.isBot} />
-                {message.imageData && (
-                  <div className="flex justify-center p-4 bg-primary rounded-lg border border-border mt-2">
-                    <img src={message.imageData} alt="Uploaded" className="max-h-64 rounded" />
-                  </div>
-                )}
+  const handleSelectConversation = (id: string) => {
+    const conversation = StorageService.getConversation(id);
+    if (conversation) {
+      setCurrentConversation(conversation);
+      setImageData(null);
+      getCurrentService().resetChat();
+      if (conversation.systemInstructions) {
+        getCurrentService().setSystemInstructions(conversation.systemInstructions);
+      }
+    }
+  };
+
+  return (
+    <div className="flex h-screen bg-primary">
+      <ConversationList
+        currentId={currentConversation.id}
+        onSelect={handleSelectConversation}
+        onNew={handleNewConversation}
+      />
+      
+      <div className="flex-1 flex flex-col">
+        <header className="bg-primary border-b border-border w-full">
+          <div className="max-w-4xl mx-auto px-4 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-300 flex items-center justify-center">
+                  <Bot size={20} />
+                </div>
+                <h1 className="text-xl font-semibold">El Chat Que No Lograrán Tumbar</h1>
               </div>
-            ))}
-            {isLoading && (
-              <div className="flex items-center gap-2 text-secondary p-4">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Pensando...</span>
+              <div className="flex items-center gap-3 flex-wrap">
+                <ModelSelector currentModel={currentModel} onModelChange={handleModelChange} />
+                <button
+                  onClick={toggleDarkMode}
+                  className="p-2 text-secondary hover:bg-secondary rounded-lg transition-colors"
+                  title={isDarkMode ? "Modo claro" : "Modo oscuro"}
+                >
+                  {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+                </button>
+                <button
+                  onClick={() => setIsInstructionsModalOpen(true)}
+                  className="p-2 text-secondary hover:bg-secondary rounded-lg transition-colors"
+                  title="Instrucciones del Sistema"
+                >
+                  <Settings2 size={20} />
+                </button>
+                <button
+                  onClick={clearChat}
+                  className="p-2 text-secondary hover:bg-secondary rounded-lg transition-colors"
+                  title="Limpiar chat"
+                >
+                  <Trash2 size={20} />
+                </button>
+              </div>
+            </div>
+            {error && (
+              <div className="mt-2">
+                <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/50 p-3 rounded-lg">
+                  {error}
+                </div>
               </div>
             )}
-            <div ref={messagesEndRef} />
           </div>
-        </div>
-      </main>
+        </header>
 
-      <footer className="border-t border-border bg-primary fixed bottom-0 w-full">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <InputControls
-            input={input}
-            setInput={setInput}
-            isLoading={isLoading}
-            error={error}
-            imageData={imageData}
-            isListening={isListening}
-            showMicReady={showMicReady}
-            handleImageUpload={handleImageUpload}
-            startVoiceInput={startVoiceInput}
-            stopVoiceInput={stopVoiceInput}
-            handleSubmit={handleSubmit}
-          />
-        </div>
-      </footer>
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto px-4">
+            <div className="space-y-4">
+              {currentConversation.messages.map((message, index) => (
+                <div key={index}>
+                  <ChatMessage 
+                    message={message.text} 
+                    isBot={message.isBot} 
+                    onRegenerate={message.isBot ? () => regenerateMessage(index) : undefined}
+                  />
+                  {message.imageData && (
+                    <div className="flex justify-center p-4 bg-primary rounded-lg border border-border mt-2">
+                      <img src={message.imageData} alt="Uploaded" className="max-h-64 rounded" />
+                    </div>
+                  )}
+                </div>
+              ))}
+              {isLoading && (
+                <div className="flex items-center gap-2 text-secondary p-4">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Pensando...</span>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+        </main>
 
-      <SystemInstructionsModal
-        isOpen={isInstructionsModalOpen}
-        onClose={() => setIsInstructionsModalOpen(false)}
-        currentInstructions={systemInstructions}
-        onSave={handleSystemInstructions}
-      />
+        <footer className="border-t border-border bg-primary">
+          <div className="max-w-4xl mx-auto px-4 py-4">
+            <InputControls
+              input={input}
+              setInput={setInput}
+              isLoading={isLoading}
+              error={error}
+              imageData={imageData}
+              isListening={isListening}
+              showMicReady={showMicReady}
+              handleImageUpload={handleImageUpload}
+              startVoiceInput={startVoiceInput}
+              stopVoiceInput={stopVoiceInput}
+              handleSubmit={handleSubmit}
+            />
+          </div>
+        </footer>
+
+        <SystemInstructionsModal
+          isOpen={isInstructionsModalOpen}
+          onClose={() => setIsInstructionsModalOpen(false)}
+          currentInstructions={currentConversation.systemInstructions || ''}
+          globalInstructions={globalInstructions}
+          onSave={handleSystemInstructions}
+        />
+      </div>
     </div>
   );
 }

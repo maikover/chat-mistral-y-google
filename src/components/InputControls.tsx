@@ -31,8 +31,16 @@ export const InputControls: React.FC<InputControlsProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
+  const handleFormSubmit = (e: React.FormEvent) => {
+    handleSubmit(e);
+    // Focus the textarea after submission
+    setTimeout(() => {
+      textAreaRef.current?.focus();
+    }, 0);
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="flex items-center gap-4">
+    <form onSubmit={handleFormSubmit} className="flex items-center gap-4">
       <div className="flex items-center gap-2">
         <input
           type="file"
@@ -80,13 +88,14 @@ export const InputControls: React.FC<InputControlsProps> = ({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
-              handleSubmit(e);
+              handleFormSubmit(e);
             }
           }}
           placeholder="Escribe tu mensaje..."
           className="w-full rounded-lg border border-border px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent textarea-expand bg-primary text-primary"
           disabled={isLoading || !!error}
           rows={1}
+          autoFocus
         />
         <button
           type="submit"

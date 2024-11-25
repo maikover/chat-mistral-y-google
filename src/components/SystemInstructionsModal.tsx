@@ -5,21 +5,25 @@ interface SystemInstructionsModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentInstructions: string;
-  onSave: (instructions: string) => void;
+  globalInstructions: string;
+  onSave: (instructions: string, isGlobal: boolean) => void;
 }
 
 export const SystemInstructionsModal: React.FC<SystemInstructionsModalProps> = ({
   isOpen,
   onClose,
   currentInstructions,
+  globalInstructions,
   onSave,
 }) => {
   const [instructions, setInstructions] = useState(currentInstructions);
+  const [isGlobal, setIsGlobal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'current' | 'global'>('current');
 
   if (!isOpen) return null;
 
   const handleSave = () => {
-    onSave(instructions);
+    onSave(instructions, isGlobal);
     onClose();
   };
 
@@ -40,15 +44,67 @@ export const SystemInstructionsModal: React.FC<SystemInstructionsModalProps> = (
         </div>
         
         <div className="p-4">
-          <p className="text-sm text-secondary mb-4">
-            Define el comportamiento, tono y estilo de respuesta del asistente. Estas instrucciones se aplicarán a toda la conversación.
-          </p>
-          <textarea
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-            className="w-full h-64 p-3 border rounded-lg bg-primary text-primary border-border focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-            placeholder="Ejemplo: Actúa como un experto en programación. Proporciona respuestas detalladas y técnicas. Incluye ejemplos de código cuando sea relevante..."
-          />
+          <div className="flex gap-4 mb-4">
+            <button
+              onClick={() => setActiveTab('current')}
+              className={`px-4 py-2 rounded-lg ${
+                activeTab === 'current'
+                  ? 'bg-purple-600 text-white dark:bg-purple-500'
+                  : 'bg-secondary text-secondary hover:bg-primary'
+              }`}
+            >
+              Chat Actual
+            </button>
+            <button
+              onClick={() => setActiveTab('global')}
+              className={`px-4 py-2 rounded-lg ${
+                activeTab === 'global'
+                  ? 'bg-purple-600 text-white dark:bg-purple-500'
+                  : 'bg-secondary text-secondary hover:bg-primary'
+              }`}
+            >
+              Configuración Global
+            </button>
+          </div>
+
+          {activeTab === 'current' ? (
+            <>
+              <p className="text-sm text-secondary mb-4">
+                Define el comportamiento para esta conversación específica.
+              </p>
+              <div className="space-y-4">
+                <textarea
+                  value={instructions}
+                  onChange={(e) => setInstructions(e.target.value)}
+                  className="w-full h-64 p-3 border rounded-lg bg-primary text-primary border-border focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Instrucciones específicas para esta conversación..."
+                />
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={isGlobal}
+                    onChange={(e) => setIsGlobal(e.target.checked)}
+                    className="rounded border-border text-purple-600 focus:ring-purple-500"
+                  />
+                  <span className="text-sm text-secondary">
+                    Guardar también como configuración global
+                  </span>
+                </label>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-secondary mb-4">
+                Define el comportamiento predeterminado para todas las conversaciones nuevas.
+              </p>
+              <textarea
+                value={globalInstructions}
+                onChange={(e) => setInstructions(e.target.value)}
+                className="w-full h-64 p-3 border rounded-lg bg-primary text-primary border-border focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                placeholder="Instrucciones globales para todas las conversaciones..."
+              />
+            </>
+          )}
         </div>
 
         <div className="flex justify-end gap-3 p-4 border-t border-border">

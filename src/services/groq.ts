@@ -2,8 +2,7 @@ import Groq from 'groq-sdk';
 
 export type GroqModelType = 
   | 'mixtral-8x7b-32768' 
-  | 'gemma-7b-it'
-  | 'llama2-70b-4096';
+  | 'gemma-7b-it';
 
 export class GroqService {
   private static instance: GroqService;
